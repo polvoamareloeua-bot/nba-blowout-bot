@@ -7,7 +7,7 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 CHECK_INTERVAL = 60  # 1 minuto
 
 def send(msg):
-    print(f"Enviando para Telegram: {msg[:50]}...")
+    print(f"Enviando mensagem: {msg[:50]}...")
     try:
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
         data = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
@@ -19,7 +19,8 @@ def get_games():
     print("Buscando jogos da NBA...")
     try:
         url = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
-        data = requests.get(url, timeout=10).json()
+        response = requests.get(url, timeout=10)
+        data = response.json()
         return data.get("scoreboard", {}).get("games", [])
     except Exception as e:
         print(f"Erro ao buscar jogos: {e}")
@@ -27,7 +28,6 @@ def get_games():
         return []
 
 def get_score(game):
-    """Extrai placar do jogo."""
     try:
         home = game["homeTeam"]
         away = game["awayTeam"]
@@ -38,18 +38,19 @@ def get_score(game):
             "a_score": int(away.get("score", 0)),
             "period": game["period"]
         }
-    except:
+    except Exception as e:
+        print(f"Erro ao extrair placar: {e}")
         return None
 
-# Mensagem inicial
-send("🤖 Bot NBA iniciado e monitorando jogos! Envie /start para confirmar.")
+send("🤖 Bot NBA iniciado e monitorando jogos!")
 
 print("Bot iniciado com sucesso!")
-print("Iniciando monitoramento...")
+print("Monitorando jogos...")
 
 while True:
     try:
         print("Checando jogos...")
+
         games = get_games()
 
         for g in games:
@@ -59,3 +60,23 @@ while True:
 
             h = info["h_score"]
             a = info["a_score"]
+            diff = abs(h - a)
+            period = info["period"]
+
+            if period == 2 and diff >= 15:
+                print(f"BLOWOUT detectado! Diferença {diff}")
+                send(
+                    f"🔥 *BLOWOUT DETECTADO!*\n\n"
+                    f"{info['h_team']} ({h}) x {info['a_team']} ({a})\n"
+                    f"Período: {period}\n"
+                    f"Diferença: {diff} pontos\n"
+                )
+            else:
+                print("Nenhum blowout.")
+
+    except Exception as e:
+        print(f"Erro geral no loop: {e}")
+        send(f"Erro no bot: {e}")
+
+    print("Aguardando 1 minuto...\n")
+    time.sleep(CHECK_INTERVAL)
