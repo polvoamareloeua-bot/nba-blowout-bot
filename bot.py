@@ -21,6 +21,18 @@ def send(msg, chat_id=CHAT_ID):
         print(f"Erro ao enviar msg: {e}")
 
 # ----------------------------------------------------------------
+# Emoção de acordo com a diferença
+# ----------------------------------------------------------------
+def emotional(diff):
+    if diff == 18:
+        return "⚠️ Começa a acender o alerta!"
+    if diff == 19:
+        return "🔥 Situação ficando perigosa!"
+    if diff == 20:
+        return "💀 Risco máximo! Tendência fortíssima de blowout!"
+    return ""
+
+# ----------------------------------------------------------------
 # Lê mensagens do Telegram (/start)
 # ----------------------------------------------------------------
 def listen_to_commands():
@@ -44,8 +56,8 @@ def listen_to_commands():
                         if text.lower().startswith("/start"):
                             send(
                                 "🤖 Bot ativo!\n"
-                                "Monitorando blowouts no 2º período.\n"
-                                "Quando houver alerta, envio placar, probabilidade e titulares.",
+                                "Monitorando blowouts a partir do 2º período.\n"
+                                "Envio placar, probabilidade e titulares do time perdendo.",
                                 chat_id
                             )
         except Exception as e:
@@ -57,7 +69,6 @@ def listen_to_commands():
 # Busca jogos na NBA
 # ----------------------------------------------------------------
 def get_games():
-    print("Buscando jogos...")
     try:
         url = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
         data = requests.get(url, timeout=10).json()
@@ -124,6 +135,11 @@ def calc_probability(diff):
     return 95
 
 # ----------------------------------------------------------------
+# Evitar alertas repetidos
+# ----------------------------------------------------------------
+already_alerted = set()
+
+# ----------------------------------------------------------------
 # Monitoramento contínuo
 # ----------------------------------------------------------------
 def monitor_blowouts():
@@ -144,26 +160,51 @@ def monitor_blowouts():
                 period = info["period"]
                 game_id = info["game_id"]
 
-                if period == 2 and diff >= 15:
-                    print("BLOWOUT ENCONTRADO!")
+                # Evitar alertas duplicados
+                if game_id in already_alerted:
+                    continue
 
-                    # 🟦 Titulares
+                # Regras de blowout
+                if period >= 2 and 18 <= diff <= 20:
+
+                    # Titulares
                     home_starters, away_starters = get_lineups(game_id)
 
-                    # 🟦 Probabilidade
+                    # Time perdendo
+                    if h > a:
+                        losing_team = info["a_team"]
+                        losing_starters = away_starters
+                    else:
+                        losing_team = info["h_team"]
+                        losing_starters = home_starters
+
+                    # Probabilidade
                     prob = calc_probability(diff)
+
+                    # Emoção
+                    emo = emotional(diff)
+
+                    # Formatar titulares
+                    starters_fmt = (
+                        " / ".join(losing_starters)
+                        if losing_starters else "Não disponível"
+                    )
 
                     msg = (
                         f"🔥 *BLOWOUT DETECTADO!*\n\n"
                         f"{info['h_team']} ({h}) x {info['a_team']} ({a})\n"
                         f"Período: {period}\n"
                         f"Diferença: *{diff} pontos*\n"
-                        f"Probabilidade estimada: *{prob}%*\n\n"
-                        f"{info['h_team']} (titulares): {', '.join(home_starters) if home_starters else 'não disponível'}\n"
-                        f"{info['a_team']} (titulares): {', '.join(away_starters) if away_starters else 'não disponível'}"
+                        f"Probabilidade estimada: *{prob}%*\n"
+                        f"{emo}\n\n"
+                        f"👥 *Titulares do time perdendo ({losing_team}):*\n"
+                        f"{starters_fmt}"
                     )
 
                     send(msg)
+
+                    # Marcar jogo como alertado
+                    already_alerted.add(game_id)
 
         except Exception as e:
             print(f"Erro monitoramento: {e}")
@@ -174,7 +215,6 @@ def monitor_blowouts():
 # ----------------------------------------------------------------
 # Inicialização
 # ----------------------------------------------------------------
-
 send("🤖 Bot NBA iniciado! Envie /start para ativar.")
 print("Bot iniciado!")
 
